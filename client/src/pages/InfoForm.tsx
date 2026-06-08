@@ -13,6 +13,7 @@ import { Label } from "@/components/ui/label";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
+import { encodeResultBlob, type ConsultationResult } from "@/lib/resultBlob";
 import { motion } from "framer-motion";
 import { ArrowLeft } from "lucide-react";
 
@@ -70,13 +71,29 @@ export default function InfoForm() {
 
   const handleSubmit = () => {
     if (!isFormValid) return;
+    const birth = `${birthYear}-${birthMonth}-${birthDay}`;
+    const result: ConsultationResult = {
+      category: sessionStorage.getItem("bamboo_category") || "",
+      concern: sessionStorage.getItem("bamboo_concern") || "",
+      phone,
+      name,
+      gender,
+      birth,
+      preferredDays,
+      preferredTimes,
+      privacyAgreed,
+      submittedAt: new Date().toISOString(),
+    };
+    const blob = encodeResultBlob(result);
+
     sessionStorage.setItem("bamboo_phone", phone);
     sessionStorage.setItem("bamboo_name", name);
     sessionStorage.setItem("bamboo_gender", gender);
-    sessionStorage.setItem("bamboo_birth", `${birthYear}-${birthMonth}-${birthDay}`);
+    sessionStorage.setItem("bamboo_birth", birth);
     sessionStorage.setItem("bamboo_day", preferredDays.join(", "));
     sessionStorage.setItem("bamboo_time", preferredTimes.join(", "));
-    navigate("/complete");
+    sessionStorage.setItem("bamboo_result_blob", blob);
+    navigate(`/result?blob=${encodeURIComponent(blob)}`);
   };
 
   return (

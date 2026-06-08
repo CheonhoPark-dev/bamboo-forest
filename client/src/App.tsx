@@ -7,6 +7,7 @@ import { ThemeProvider } from "./contexts/ThemeContext";
 import Home from "./pages/Home";
 import InfoForm from "./pages/InfoForm";
 import Complete from "./pages/Complete";
+import Result from "./pages/Result";
 
 function Router() {
   return (
@@ -14,6 +15,7 @@ function Router() {
       <Route path={"/"} component={Home} />
       <Route path={"/info"} component={InfoForm} />
       <Route path={"/complete"} component={Complete} />
+      <Route path={"/result"} component={Result} />
       <Route path={"/404"} component={NotFound} />
       <Route component={NotFound} />
     </Switch>
