@@ -13,9 +13,10 @@ import { Label } from "@/components/ui/label";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
-import { encodeResultBlob, type ConsultationResult } from "@/lib/resultBlob";
+import type { ConsultationSubmissionInput } from "@shared/consultation";
 import { motion } from "framer-motion";
 import { ArrowLeft } from "lucide-react";
+import { toast } from "sonner";
 
 const days = ["월", "화", "수", "목", "금", "토", "일"];
 const timeSlots = [
@@ -42,6 +43,7 @@ export default function InfoForm() {
   const [preferredDays, setPreferredDays] = useState<string[]>([]);
   const [preferredTimes, setPreferredTimes] = useState<string[]>([]);
   const [privacyAgreed, setPrivacyAgreed] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   const formatPhone = (value: string) => {
     const numbers = value.replace(/\D/g, "");
@@ -69,10 +71,22 @@ export default function InfoForm() {
 
   const isFormValid = phone.replace(/\D/g, "").length >= 10 && name.trim() && gender && birthYear && birthMonth && birthDay && preferredDays.length > 0 && preferredTimes.length > 0 && privacyAgreed;
 
-  const handleSubmit = () => {
-    if (!isFormValid) return;
+  const clearStoredDraft = () => {
+    sessionStorage.removeItem("bamboo_category");
+    sessionStorage.removeItem("bamboo_concern");
+    sessionStorage.removeItem("bamboo_phone");
+    sessionStorage.removeItem("bamboo_name");
+    sessionStorage.removeItem("bamboo_gender");
+    sessionStorage.removeItem("bamboo_birth");
+    sessionStorage.removeItem("bamboo_day");
+    sessionStorage.removeItem("bamboo_time");
+    sessionStorage.removeItem("bamboo_result_blob");
+  };
+
+  const handleSubmit = async () => {
+    if (!isFormValid || isSubmitting) return;
     const birth = `${birthYear}-${birthMonth}-${birthDay}`;
-    const result: ConsultationResult = {
+    const result: ConsultationSubmissionInput = {
       category: sessionStorage.getItem("bamboo_category") || "",
       concern: sessionStorage.getItem("bamboo_concern") || "",
       phone,
@@ -84,16 +98,31 @@ export default function InfoForm() {
       privacyAgreed,
       submittedAt: new Date().toISOString(),
     };
-    const blob = encodeResultBlob(result);
 
-    sessionStorage.setItem("bamboo_phone", phone);
-    sessionStorage.setItem("bamboo_name", name);
-    sessionStorage.setItem("bamboo_gender", gender);
-    sessionStorage.setItem("bamboo_birth", birth);
-    sessionStorage.setItem("bamboo_day", preferredDays.join(", "));
-    sessionStorage.setItem("bamboo_time", preferredTimes.join(", "));
-    sessionStorage.setItem("bamboo_result_blob", blob);
-    navigate(`/result?blob=${encodeURIComponent(blob)}`);
+    setIsSubmitting(true);
+
+    try {
+      const response = await fetch("/api/submissions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(result),
+      });
+      const data = (await response.json().catch(() => null)) as
+        | { ok?: boolean; error?: string }
+        | null;
+
+      if (!response.ok || !data?.ok) {
+        throw new Error(data?.error || "Failed to submit");
+      }
+
+      clearStoredDraft();
+      toast.success("감사합니다! 제출이 성공적으로 완료되었습니다");
+      navigate("/");
+    } catch {
+      toast.error("제출 중 오류가 발생했습니다. 다시 시도해주세요.");
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (
@@ -312,10 +341,10 @@ export default function InfoForm() {
         >
           <Button
             onClick={handleSubmit}
-            disabled={!isFormValid}
+            disabled={!isFormValid || isSubmitting}
             className="w-full py-6 rounded-2xl bg-[#ff6b5a] hover:bg-[#ff5a47] text-white font-semibold text-[15px] shadow-md shadow-[#ff6b5a]/20 border-0 transition-all duration-200 active:scale-[0.97] disabled:opacity-40 disabled:shadow-none"
           >
-            상담 신청하기 ✨
+            {isSubmitting ? "제출 중..." : "상담 신청하기 ✨"}
           </Button>
         </motion.div>
       </motion.div>
