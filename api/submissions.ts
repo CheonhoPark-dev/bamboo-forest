@@ -6,7 +6,13 @@ import type {
 } from "../shared/consultation";
 
 const SUBMISSION_PREFIX = "submissions/";
-const BLOB_ACCESS = process.env.BLOB_ACCESS === "private" ? "private" : "public";
+type BlobAccess = "private" | "public";
+const PREFERRED_BLOB_ACCESS: BlobAccess =
+  process.env.BLOB_ACCESS === "public" ? "public" : "private";
+const BLOB_ACCESS_CANDIDATES: BlobAccess[] = [
+  PREFERRED_BLOB_ACCESS,
+  PREFERRED_BLOB_ACCESS === "private" ? "public" : "private",
+];
 const JSON_HEADERS = {
   "content-type": "application/json; charset=utf-8",
   "cache-control": "no-store",
@@ -39,16 +45,44 @@ function toStringArray(value: unknown) {
 }
 
 async function readBlobJson(pathname: string) {
-  const result = await get(pathname, {
-    access: BLOB_ACCESS,
-    useCache: false,
-  });
+  let lastError: unknown = null;
 
-  if (!result || result.statusCode !== 200) {
-    return null;
+  for (const access of BLOB_ACCESS_CANDIDATES) {
+    try {
+      const result = await get(pathname, {
+        access,
+        useCache: false,
+      });
+
+      if (!result || result.statusCode !== 200) {
+        return null;
+      }
+
+      return new Response(result.stream).json();
+    } catch (error) {
+      lastError = error;
+    }
   }
 
-  return new Response(result.stream).json();
+  throw lastError;
+}
+
+async function putSubmission(pathname: string, body: string) {
+  let lastError: unknown = null;
+
+  for (const access of BLOB_ACCESS_CANDIDATES) {
+    try {
+      return await put(pathname, body, {
+        access,
+        contentType: "application/json",
+        addRandomSuffix: false,
+      });
+    } catch (error) {
+      lastError = error;
+    }
+  }
+
+  throw lastError;
 }
 
 function normalizeSubmissionInput(value: unknown): ConsultationSubmissionInput | null {
@@ -114,11 +148,7 @@ export async function POST(request: Request) {
       savedAt,
     };
     const pathname = `${SUBMISSION_PREFIX}${savedAt.replace(/[-:.TZ]/g, "")}-${id}.json`;
-    const blob = await put(pathname, JSON.stringify(submission, null, 2), {
-      access: BLOB_ACCESS,
-      contentType: "application/json",
-      addRandomSuffix: false,
-    });
+    const blob = await putSubmission(pathname, JSON.stringify(submission, null, 2));
 
     return json(
       {
