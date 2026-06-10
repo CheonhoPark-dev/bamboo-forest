@@ -13,13 +13,20 @@ import {
   Phone,
   RefreshCw,
   ShieldCheck,
+  Trash2,
   UserRound,
 } from "lucide-react";
 import { useEffect, useMemo, useState, type ComponentType } from "react";
+import { toast } from "sonner";
 import { useLocation } from "wouter";
 
 type SubmissionsResponse = {
   submissions?: ConsultationSubmission[];
+  error?: string;
+};
+
+type DeleteResponse = {
+  ok?: boolean;
   error?: string;
 };
 
@@ -134,6 +141,8 @@ export default function Result() {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState("");
   const [copiedId, setCopiedId] = useState("");
+  const [confirmDeleteId, setConfirmDeleteId] = useState("");
+  const [deletingId, setDeletingId] = useState("");
 
   const latestSavedAt = useMemo(() => {
     const latest = submissions[0]?.savedAt;
@@ -172,6 +181,44 @@ export default function Result() {
     await navigator.clipboard.writeText(buildCopyText(submission));
     setCopiedId(submission.id);
     window.setTimeout(() => setCopiedId(""), 1400);
+  };
+
+  const handleDelete = async (submission: ConsultationSubmission) => {
+    if (confirmDeleteId !== submission.id) {
+      setConfirmDeleteId(submission.id);
+      return;
+    }
+
+    if (!submission.pathname) {
+      toast.error("삭제할 Blob 경로가 없습니다.");
+      return;
+    }
+
+    setDeletingId(submission.id);
+
+    try {
+      const response = await fetch(
+        `/api/submissions?pathname=${encodeURIComponent(submission.pathname)}`,
+        { method: "DELETE" }
+      );
+      const data = (await response
+        .json()
+        .catch(() => null)) as DeleteResponse | null;
+
+      if (!response.ok || !data?.ok) {
+        throw new Error(data?.error || "Failed to delete submission");
+      }
+
+      setSubmissions(current =>
+        current.filter(item => item.id !== submission.id)
+      );
+      toast.success("결과를 삭제했습니다.");
+    } catch {
+      toast.error("삭제에 실패했습니다. 다시 시도해주세요.");
+    } finally {
+      setConfirmDeleteId("");
+      setDeletingId("");
+    }
   };
 
   return (
@@ -287,23 +334,49 @@ export default function Result() {
                       {submission.phone || "전화번호 없음"}
                     </p>
                   </div>
-                  <Button
-                    onClick={() => void handleCopy(submission)}
-                    variant="outline"
-                    className="h-9 flex-none rounded-lg border-gray-200 px-3 text-xs text-gray-700"
-                  >
-                    {copiedId === submission.id ? (
-                      <>
-                        <Check className="mr-1.5 h-4 w-4" />
-                        복사됨
-                      </>
-                    ) : (
-                      <>
-                        <Clipboard className="mr-1.5 h-4 w-4" />
-                        복사
-                      </>
-                    )}
-                  </Button>
+                  <div className="flex flex-none flex-col gap-2">
+                    <Button
+                      onClick={() => void handleCopy(submission)}
+                      variant="outline"
+                      className="h-9 rounded-lg border-gray-200 px-3 text-xs text-gray-700"
+                    >
+                      {copiedId === submission.id ? (
+                        <>
+                          <Check className="mr-1.5 h-4 w-4" />
+                          복사됨
+                        </>
+                      ) : (
+                        <>
+                          <Clipboard className="mr-1.5 h-4 w-4" />
+                          복사
+                        </>
+                      )}
+                    </Button>
+                    <Button
+                      onClick={() => void handleDelete(submission)}
+                      disabled={Boolean(deletingId)}
+                      variant="outline"
+                      className={`h-9 rounded-lg px-3 text-xs ${
+                        confirmDeleteId === submission.id
+                          ? "border-red-300 bg-red-50 text-red-600 hover:bg-red-100"
+                          : "border-gray-200 text-gray-700 hover:border-red-200 hover:bg-red-50 hover:text-red-600"
+                      }`}
+                    >
+                      {deletingId === submission.id ? (
+                        <>
+                          <RefreshCw className="mr-1.5 h-4 w-4 animate-spin" />
+                          삭제 중
+                        </>
+                      ) : (
+                        <>
+                          <Trash2 className="mr-1.5 h-4 w-4" />
+                          {confirmDeleteId === submission.id
+                            ? "삭제 확인"
+                            : "삭제"}
+                        </>
+                      )}
+                    </Button>
+                  </div>
                 </div>
 
                 <section className="border-y border-[#ffe3dc] bg-[#fff8f6] px-4 py-4">

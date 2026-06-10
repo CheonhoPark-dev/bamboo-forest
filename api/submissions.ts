@@ -1,4 +1,4 @@
-import { get, list, put } from "@vercel/blob";
+import { del, get, list, put } from "@vercel/blob";
 import { randomUUID } from "node:crypto";
 import type {
   ConsultationSubmission,
@@ -38,7 +38,10 @@ function toStringArray(value: unknown) {
   }
 
   if (typeof value === "string" && value.trim()) {
-    return value.split(",").map((item) => item.trim()).filter(Boolean);
+    return value
+      .split(",")
+      .map(item => item.trim())
+      .filter(Boolean);
   }
 
   return [];
@@ -85,7 +88,9 @@ async function putSubmission(pathname: string, body: string) {
   throw lastError;
 }
 
-function normalizeSubmissionInput(value: unknown): ConsultationSubmissionInput | null {
+function normalizeSubmissionInput(
+  value: unknown
+): ConsultationSubmissionInput | null {
   if (!isRecord(value)) return null;
 
   const submission = {
@@ -110,7 +115,7 @@ function normalizeSubmissionInput(value: unknown): ConsultationSubmissionInput |
 
 function normalizeStoredSubmission(
   value: unknown,
-  metadata: Pick<ConsultationSubmission, "blobUrl" | "pathname">,
+  metadata: Pick<ConsultationSubmission, "blobUrl" | "pathname">
 ): ConsultationSubmission | null {
   if (!isRecord(value)) return null;
 
@@ -132,6 +137,10 @@ function normalizeStoredSubmission(
   };
 }
 
+function isSubmissionPathname(pathname: string) {
+  return pathname.startsWith(SUBMISSION_PREFIX) && pathname.endsWith(".json");
+}
+
 export async function POST(request: Request) {
   try {
     const input = normalizeSubmissionInput(await request.json());
@@ -148,7 +157,10 @@ export async function POST(request: Request) {
       savedAt,
     };
     const pathname = `${SUBMISSION_PREFIX}${savedAt.replace(/[-:.TZ]/g, "")}-${id}.json`;
-    const blob = await putSubmission(pathname, JSON.stringify(submission, null, 2));
+    const blob = await putSubmission(
+      pathname,
+      JSON.stringify(submission, null, 2)
+    );
 
     return json(
       {
@@ -159,14 +171,15 @@ export async function POST(request: Request) {
           pathname: blob.pathname,
         },
       },
-      { status: 201 },
+      { status: 201 }
     );
   } catch (error) {
     return json(
       {
-        error: error instanceof Error ? error.message : "Failed to store submission",
+        error:
+          error instanceof Error ? error.message : "Failed to store submission",
       },
-      { status: 500 },
+      { status: 500 }
     );
   }
 }
@@ -180,7 +193,7 @@ export async function GET() {
 
     const submissions = (
       await Promise.all(
-        blobs.map(async (blob) => {
+        blobs.map(async blob => {
           try {
             const stored = await readBlobJson(blob.pathname);
             return normalizeStoredSubmission(stored, {
@@ -190,19 +203,47 @@ export async function GET() {
           } catch {
             return null;
           }
-        }),
+        })
       )
     )
-      .filter((submission): submission is ConsultationSubmission => Boolean(submission))
+      .filter((submission): submission is ConsultationSubmission =>
+        Boolean(submission)
+      )
       .sort((a, b) => b.savedAt.localeCompare(a.savedAt));
 
     return json({ submissions });
   } catch (error) {
     return json(
       {
-        error: error instanceof Error ? error.message : "Failed to load submissions",
+        error:
+          error instanceof Error ? error.message : "Failed to load submissions",
       },
-      { status: 500 },
+      { status: 500 }
+    );
+  }
+}
+
+export async function DELETE(request: Request) {
+  try {
+    const { searchParams } = new URL(request.url);
+    const pathname = searchParams.get("pathname") || "";
+
+    if (!isSubmissionPathname(pathname)) {
+      return json({ error: "Invalid submission pathname" }, { status: 400 });
+    }
+
+    await del(pathname);
+
+    return json({ ok: true, pathname });
+  } catch (error) {
+    return json(
+      {
+        error:
+          error instanceof Error
+            ? error.message
+            : "Failed to delete submission",
+      },
+      { status: 500 }
     );
   }
 }
